@@ -35,6 +35,26 @@ async function waitForServer(timeoutSec = 60) {
   return false;
 }
 
+async function ensureGenerated() {
+  // Run codegen if generated files are missing (first-time setup or after fresh clone)
+  const needsCodegen =
+    !fs.existsSync(path.join(MOORHEN_DIR, "src/version.js")) ||
+    !fs.existsSync(path.join(MOORHEN_DIR, "src/protobuf/MoorhenSession.js")) ||
+    !fs.existsSync(path.join(MOORHEN_DIR, "src/utils/__graphql__/graphql.ts"));
+  if (!needsCodegen) return;
+  log("Running one-time codegen (version, protobuf, graphql)...");
+  const env = { ...process.env, PATH: "/opt/homebrew/bin:" + (process.env.PATH || "") };
+  const { execFileSync } = require("child_process");
+  for (const script of ["create-version", "transpile-protobuf", "transpile-graphql-codegen"]) {
+    try {
+      execFileSync("/opt/homebrew/bin/npm", ["run", script], { cwd: MOORHEN_DIR, env, stdio: "pipe" });
+      log("  " + script + " ok");
+    } catch (e) {
+      log("  " + script + " failed: " + e.message);
+    }
+  }
+}
+
 async function startVite() {
   // Check if vite is already running
   if (await checkServer()) {
@@ -47,6 +67,9 @@ async function startVite() {
     dialog.showErrorBox("Moorhen not found", `Moorhen source directory not found at:\n${MOORHEN_DIR}`);
     return false;
   }
+
+  // Ensure auto-generated files exist
+  await ensureGenerated();
 
   // Build env: prepend Homebrew bin (avoid CCP4's old node)
   const env = { ...process.env, PATH: "/opt/homebrew/bin:" + (process.env.PATH || "") };
