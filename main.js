@@ -77,7 +77,7 @@ async function startVite() {
   // Source emsdk env if it exists - but easier to just rely on PATH
   viteProcess = spawn(
     "/opt/homebrew/bin/npx",
-    ["vite", "--config", "vite.config.mts"],
+    ["vite", "--config", "vite.config.mts", "--port", String(VITE_PORT), "--strictPort"],
     {
       cwd: MOORHEN_DIR,
       env,
