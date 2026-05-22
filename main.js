@@ -19,6 +19,7 @@ const VITE_PORT = parseInt(process.env.MOORHEN_VITE_PORT || VARIANT.vitePort || 
 const VITE_URL = `http://localhost:${VITE_PORT}/`;
 const LOG_PATH = process.env.MOORHEN_LOG_PATH || VARIANT.logPath || "/tmp/moorhen-wrapper.log";
 const WINDOW_TITLE = process.env.MOORHEN_TITLE || VARIANT.title || "Moorhen";
+const OPEN_DEVTOOLS = VARIANT.devTools === true;
 
 let viteProcess = null;
 let mainWindow = null;
@@ -133,7 +134,7 @@ function createWindow() {
   // 32-bit WASM is forced via window.MOORHEN_FORCE_32BIT, set early by preload.js.
   // (The old dom-ready WebAssembly.validate override never matched the probe — it checked
   //  arr[12] instead of arr[11] — and being renderer-only could not reach the Coot worker.)
-  mainWindow.webContents.openDevTools({ mode: "detach" });
+  if (OPEN_DEVTOOLS) mainWindow.webContents.openDevTools({ mode: "detach" });
   mainWindow.webContents.on("console-message", (event, level, message, line, sourceId) => {
     log(`renderer console: ${message}`);
   });

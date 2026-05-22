@@ -25,6 +25,7 @@ const VARIANTS = {
       vitePort: 5174,
       logPath: "/tmp/moorhen-wrapper-dev.log",
       title: "Moorhen Dev",
+      devTools: true,
     },
   },
 };
