@@ -1,9 +1,10 @@
-const { app, BrowserWindow, dialog } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const http = require("http");
 const fs = require("fs");
 const os = require("os");
+const crypto = require("crypto");
 
 // Variant config is baked into variant.json at package time (see forge.config.js)
 // and overridable via env vars for unpackaged `npm start` / `electron .` runs.
@@ -124,23 +125,14 @@ function createWindow() {
       enableBlinkFeatures: "SharedArrayBuffer",
       // Disable sandbox - WASM pthread workers need to spawn child workers
       sandbox: false,
+      // Preload sets window.MOORHEN_FORCE_32BIT early (avoids the 64-bit init hang)
+      preload: path.join(__dirname, "preload.js"),
     },
   });
   mainWindow.loadURL(VITE_URL);
-  // Force 32-bit WASM (memory64 unreliable in some Electron configs)
-  // by overriding WebAssembly.validate to return false for memory64 detection probe
-  mainWindow.webContents.on("dom-ready", () => {
-    mainWindow.webContents.executeJavaScript(`
-      const origValidate = WebAssembly.validate;
-      WebAssembly.validate = function(bytes) {
-        // Detect memory64 probe (4 imports of memory)
-        const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-        if (arr.length === 13 && arr[12] === 4) return false;
-        return origValidate.call(this, bytes);
-      };
-      console.log('Forced 32-bit WASM mode');
-    `).catch(e => log("force32 error: " + e.message));
-  });
+  // 32-bit WASM is forced via window.MOORHEN_FORCE_32BIT, set early by preload.js.
+  // (The old dom-ready WebAssembly.validate override never matched the probe — it checked
+  //  arr[12] instead of arr[11] — and being renderer-only could not reach the Coot worker.)
   mainWindow.webContents.openDevTools({ mode: "detach" });
   mainWindow.webContents.on("console-message", (event, level, message, line, sourceId) => {
     log(`renderer console: ${message}`);
@@ -150,12 +142,68 @@ function createWindow() {
 
 // vite-plugin-cross-origin-isolation already sets COEP/COOP — don't override here
 
+// ---- Control server (for MoorhenMCP) ---------------------------------------
+// Local HTTP endpoint that the MoorhenMCP server POSTs commands to. Token-auth,
+// 127.0.0.1 only. Non-screenshot verbs are forwarded to the renderer's
+// MoorhenControlBridge over IPC; "screenshot" is served here via capturePage.
+const CONTROL_PORT = parseInt(process.env.MOORHEN_CONTROL_PORT || String(VITE_PORT + 36827), 10); // 5173->42000
+const CONTROL_TOKEN = process.env.MOORHEN_CONTROL_TOKEN || crypto.randomBytes(16).toString("hex");
+const CONTROL_FILE = path.join(os.homedir(), ".moorhen-mcp", `control-${VITE_PORT}.json`);
+const controlPending = new Map(); // id -> { resolve, reject, timer }
+
+function invokeRenderer(win, verb, args) {
+  return new Promise((resolve, reject) => {
+    const id = crypto.randomUUID();
+    const timer = setTimeout(() => { controlPending.delete(id); reject(new Error("renderer timeout")); }, 120000);
+    controlPending.set(id, { resolve, reject, timer });
+    win.webContents.send("moorhen-control:invoke", { id, verb, args });
+  });
+}
+
+function startControlServer(win) {
+  ipcMain.on("moorhen-control:result", (_e, res) => {
+    const p = controlPending.get(res.id);
+    if (!p) return;
+    clearTimeout(p.timer); controlPending.delete(res.id);
+    if (res.ok) p.resolve(res.result); else p.reject(new Error(res.error || "control error"));
+  });
+  ipcMain.on("moorhen-control:ready", (_e, verbs) => log("control bridge ready; verbs: " + (verbs || []).join(",")));
+
+  const server = http.createServer((req, res) => {
+    if (req.method !== "POST") { res.writeHead(405); res.end(); return; }
+    let body = "";
+    req.on("data", (c) => { body += c; if (body.length > 50 * 1024 * 1024) req.destroy(); });
+    req.on("end", async () => {
+      const reply = (code, obj) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(obj)); };
+      let msg;
+      try { msg = JSON.parse(body || "{}"); } catch (e) { return reply(400, { ok: false, error: "bad json" }); }
+      if (msg.token !== CONTROL_TOKEN) return reply(403, { ok: false, error: "bad token" });
+      try {
+        let result;
+        if (msg.verb === "ping") result = { ok: true, title: WINDOW_TITLE, vitePort: VITE_PORT };
+        else if (msg.verb === "screenshot") result = { png: (await win.webContents.capturePage()).toPNG().toString("base64") };
+        else result = await invokeRenderer(win, msg.verb, msg.args);
+        reply(200, { ok: true, result });
+      } catch (e) { reply(200, { ok: false, error: String((e && e.message) || e) }); }
+    });
+  });
+  server.on("error", (e) => log("control server error: " + e.message));
+  server.listen(CONTROL_PORT, "127.0.0.1", () => {
+    log(`control server on 127.0.0.1:${CONTROL_PORT}`);
+    try {
+      fs.mkdirSync(path.dirname(CONTROL_FILE), { recursive: true });
+      fs.writeFileSync(CONTROL_FILE, JSON.stringify({ port: CONTROL_PORT, token: CONTROL_TOKEN, vitePort: VITE_PORT, title: WINDOW_TITLE, pid: process.pid }, null, 2));
+    } catch (e) { log("control file write failed: " + e.message); }
+  });
+}
+
 app.whenReady().then(async () => {
   fs.writeFileSync(LOG_PATH, "=== Moorhen wrapper started " + new Date().toISOString() + " ===\n");
   log("App ready");
   const ok = await startVite();
   if (ok) {
     createWindow();
+    startControlServer(mainWindow);
   } else {
     app.quit();
   }
@@ -166,6 +214,7 @@ app.on("window-all-closed", () => {
   if (viteProcess) {
     try { viteProcess.kill("SIGTERM"); } catch (e) {}
   }
+  try { fs.unlinkSync(CONTROL_FILE); } catch (e) {}
   app.quit();
 });
 
