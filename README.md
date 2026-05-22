@@ -10,7 +10,8 @@ This is **not** a full Electron port of Moorhen. It's a thin wrapper that:
 2. Opens an Electron window pointed at `http://localhost:5173/`
 3. Forces 32-bit WASM mode (more reliable in Electron's renderer)
 4. Sets COEP/COOP headers for SharedArrayBuffer
-5. Kills vite when the window closes
+5. Runs a token-authenticated HTTP control server on `127.0.0.1:<random>` and writes `{port, token, vitePort}` to `~/.moorhen-mcp/control-<vitePort>.json` — that's what [MoorhenMCP](https://github.com/3viil/MoorhenMCP) connects to so Claude can drive the running app
+6. Kills vite when the window closes
 
 On first launch it also runs the baby-gru codegen steps if their outputs are missing (`create-version`, `transpile-ts-worker`, `transpile-protobuf`, `transpile-graphql-codegen`). The `transpile-ts-worker` step builds `public/MoorhenAssets/wasm/CootWorker.js` — without it the Coot command worker can't load (the request falls back to vite's HTML, throwing `Unexpected token '<'`).
 
