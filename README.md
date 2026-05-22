@@ -12,6 +12,8 @@ This is **not** a full Electron port of Moorhen. It's a thin wrapper that:
 4. Sets COEP/COOP headers for SharedArrayBuffer
 5. Kills vite when the window closes
 
+On first launch it also runs the baby-gru codegen steps if their outputs are missing (`create-version`, `transpile-ts-worker`, `transpile-protobuf`, `transpile-graphql-codegen`). The `transpile-ts-worker` step builds `public/MoorhenAssets/wasm/CootWorker.js` — without it the Coot command worker can't load (the request falls back to vite's HTML, throwing `Unexpected token '<'`).
+
 The benefit: avoids the CRA/CJS/double-bundling problems of the original MoorhenElectron build path. The vite dev server natively handles all the module resolution and HMR.
 
 ## Requirements
@@ -45,4 +47,12 @@ To open with DevTools, edit `main.js` and uncomment the `openDevTools` line.
 
 ## Dev variant
 
-There's a separate `MoorhenWrapper-Dev` that points to `~/Moorhen-dev/baby-gru/` for experimental work. It uses port 5174 to avoid conflicting with the production version.
+The dev app builds from this same repo — no separate copy needed:
+
+```bash
+npm run package:dev
+xattr -rc out/MoorhenDev-darwin-arm64/MoorhenDev.app
+cp -r out/MoorhenDev-darwin-arm64/MoorhenDev.app /Applications/
+```
+
+`package:dev` sets `MOORHEN_VARIANT=dev`, which `forge.config.js` bakes into `variant.json` (read by `main.js`): it targets `~/Moorhen-dev/baby-gru/` on port 5174, so it won't clash with production (port 5173). For unpackaged runs (`npm start`) you can override at runtime with `MOORHEN_DIR`, `MOORHEN_VITE_PORT`, `MOORHEN_TITLE`, `MOORHEN_LOG_PATH`.

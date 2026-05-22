@@ -5,17 +5,8 @@
   "scripts": {
     "start": "electron .",
     "package": "electron-forge package",
+    "package:dev": "MOORHEN_VARIANT=dev electron-forge package",
     "make": "electron-forge make"
-  },
-  "config": {
-    "forge": {
-      "packagerConfig": {
-        "name": "MoorhenLocal"
-      },
-      "makers": [
-        { "name": "@electron-forge/maker-zip", "platforms": ["darwin"] }
-      ]
-    }
   },
   "devDependencies": {
     "electron": "^38.0.0",

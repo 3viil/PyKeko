@@ -1,4 +1,5 @@
 node_modules/
 out/
+variant.json
 *.log
 .DS_Store

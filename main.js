@@ -5,10 +5,19 @@ const http = require("http");
 const fs = require("fs");
 const os = require("os");
 
-const MOORHEN_DIR = path.join(os.homedir(), "Moorhen/baby-gru");
-const VITE_PORT = 5173;
+// Variant config is baked into variant.json at package time (see forge.config.js)
+// and overridable via env vars for unpackaged `npm start` / `electron .` runs.
+// Defaults are the production values.
+function loadVariant() {
+  try { return require(path.join(__dirname, "variant.json")); } catch (e) { return {}; }
+}
+const VARIANT = loadVariant();
+const MOORHEN_DIR = process.env.MOORHEN_DIR
+  || path.join(os.homedir(), VARIANT.moorhenSubdir || "Moorhen/baby-gru");
+const VITE_PORT = parseInt(process.env.MOORHEN_VITE_PORT || VARIANT.vitePort || "5173", 10);
 const VITE_URL = `http://localhost:${VITE_PORT}/`;
-const LOG_PATH = "/tmp/moorhen-wrapper.log";
+const LOG_PATH = process.env.MOORHEN_LOG_PATH || VARIANT.logPath || "/tmp/moorhen-wrapper.log";
+const WINDOW_TITLE = process.env.MOORHEN_TITLE || VARIANT.title || "Moorhen";
 
 let viteProcess = null;
 let mainWindow = null;
@@ -39,13 +48,17 @@ async function ensureGenerated() {
   // Run codegen if generated files are missing (first-time setup or after fresh clone)
   const needsCodegen =
     !fs.existsSync(path.join(MOORHEN_DIR, "src/version.js")) ||
+    !fs.existsSync(path.join(MOORHEN_DIR, "public/MoorhenAssets/wasm/CootWorker.js")) ||
     !fs.existsSync(path.join(MOORHEN_DIR, "src/protobuf/MoorhenSession.js")) ||
     !fs.existsSync(path.join(MOORHEN_DIR, "src/utils/__graphql__/graphql.ts"));
   if (!needsCodegen) return;
-  log("Running one-time codegen (version, protobuf, graphql)...");
+  log("Running one-time codegen (version, ts-worker, protobuf, graphql)...");
   const env = { ...process.env, PATH: "/opt/homebrew/bin:" + (process.env.PATH || "") };
   const { execFileSync } = require("child_process");
-  for (const script of ["create-version", "transpile-protobuf", "transpile-graphql-codegen"]) {
+  // Order matches baby-gru's prestart script; transpile-ts-worker builds
+  // public/MoorhenAssets/wasm/CootWorker.js, without which the Coot command
+  // worker fails to load (script returns vite's HTML fallback).
+  for (const script of ["create-version", "transpile-ts-worker", "transpile-protobuf", "transpile-graphql-codegen"]) {
     try {
       execFileSync("/opt/homebrew/bin/npm", ["run", script], { cwd: MOORHEN_DIR, env, stdio: "pipe" });
       log("  " + script + " ok");
@@ -103,7 +116,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    title: "Moorhen",
+    title: WINDOW_TITLE,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
