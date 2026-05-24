@@ -15,13 +15,30 @@ function loadVariant() {
 const VARIANT = loadVariant();
 const MOORHEN_DIR = process.env.MOORHEN_DIR
   || path.join(os.homedir(), VARIANT.moorhenSubdir || "Moorhen/baby-gru");
-const VITE_PORT = parseInt(process.env.MOORHEN_VITE_PORT || VARIANT.vitePort || "5173", 10);
-const VITE_URL = `http://localhost:${VITE_PORT}/`;
 const LOG_PATH = process.env.MOORHEN_LOG_PATH || VARIANT.logPath || "/tmp/moorhen-wrapper.log";
 const WINDOW_TITLE = process.env.MOORHEN_TITLE || VARIANT.title || "Moorhen";
 const OPEN_DEVTOOLS = VARIANT.devTools === true;
 
+// dist variant: serve a packaged static bundle instead of running vite.
+// process.resourcesPath points at the .app's Resources/ when packaged;
+// in dev (electron .) it points elsewhere — fall back to ../static then.
+function resolveStaticDir() {
+  if (!VARIANT.bundledDist) return null;
+  const packagedPath = path.join(process.resourcesPath, VARIANT.bundledDist);
+  if (fs.existsSync(packagedPath)) return packagedPath;
+  const devPath = path.join(__dirname, VARIANT.bundledDist);
+  if (fs.existsSync(devPath)) return devPath;
+  return null;
+}
+const STATIC_DIR = resolveStaticDir();
+const IS_DIST = !!STATIC_DIR;
+
+// Port is dynamic in dist mode (whatever the static server picks), fixed
+// in prod/dev mode (matches vite port so MoorhenMCP can find it).
+let SERVE_PORT = parseInt(process.env.MOORHEN_VITE_PORT || VARIANT.vitePort || "5173", 10);
+
 let viteProcess = null;
+let staticServer = null;
 let mainWindow = null;
 
 function log(msg) {
@@ -30,7 +47,7 @@ function log(msg) {
 
 function checkServer() {
   return new Promise((resolve) => {
-    const req = http.get(VITE_URL, (res) => {
+    const req = http.get(`http://localhost:${SERVE_PORT}/`, (res) => {
       resolve(res.statusCode === 200);
     });
     req.on("error", () => resolve(false));
@@ -44,6 +61,71 @@ async function waitForServer(timeoutSec = 60) {
     await new Promise(r => setTimeout(r, 500));
   }
   return false;
+}
+
+// In-process static-file server for the dist variant. Serves the packaged
+// SPA bundle with the COOP/COEP headers SharedArrayBuffer requires. Picks a
+// random localhost port (returned via SERVE_PORT) so multiple installs can
+// coexist.
+const MIME_TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".js":   "application/javascript; charset=utf-8",
+  ".mjs":  "application/javascript; charset=utf-8",
+  ".css":  "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".wasm": "application/wasm",
+  ".svg":  "image/svg+xml",
+  ".png":  "image/png",
+  ".jpg":  "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif":  "image/gif",
+  ".ico":  "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2":"font/woff2",
+  ".ttf":  "font/ttf",
+  ".map":  "application/json; charset=utf-8",
+  ".cif":  "chemical/x-cif",
+  ".pdb":  "chemical/x-pdb",
+  ".mtz":  "application/octet-stream",
+  ".txt":  "text/plain; charset=utf-8",
+  ".xml":  "application/xml; charset=utf-8",
+};
+
+function startStaticServer(distDir) {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      let urlPath = req.url.split("?")[0];
+      // SPA fallback: any path that doesn't match a real file falls back to /index.html
+      let filePath = path.join(distDir, decodeURIComponent(urlPath));
+      // Path traversal guard
+      if (!filePath.startsWith(distDir)) { res.writeHead(403); return res.end(); }
+      fs.stat(filePath, (err, st) => {
+        if (err || st.isDirectory()) {
+          // Try /index.html (root and SPA-routed paths)
+          filePath = path.join(distDir, "index.html");
+        }
+        fs.readFile(filePath, (rerr, data) => {
+          if (rerr) { res.writeHead(404); return res.end(String(rerr.message || rerr)); }
+          const ext = path.extname(filePath).toLowerCase();
+          const mime = MIME_TYPES[ext] || "application/octet-stream";
+          res.writeHead(200, {
+            "content-type": mime,
+            "cross-origin-opener-policy": "same-origin",
+            "cross-origin-embedder-policy": "require-corp",
+            "cache-control": "no-store",
+          });
+          res.end(data);
+        });
+      });
+    });
+    server.on("error", reject);
+    // Port 0 → OS picks free port
+    server.listen(0, "127.0.0.1", () => {
+      const port = server.address().port;
+      log("static server on 127.0.0.1:" + port + " serving " + distDir);
+      resolve({ server, port });
+    });
+  });
 }
 
 async function ensureGenerated() {
@@ -92,7 +174,7 @@ async function startVite() {
   // Source emsdk env if it exists - but easier to just rely on PATH
   viteProcess = spawn(
     "/opt/homebrew/bin/npx",
-    ["vite", "--config", "vite.config.mts", "--port", String(VITE_PORT), "--strictPort"],
+    ["vite", "--config", "vite.config.mts", "--port", String(SERVE_PORT), "--strictPort"],
     {
       cwd: MOORHEN_DIR,
       env,
@@ -114,6 +196,25 @@ async function startVite() {
   return true;
 }
 
+async function startBundledServer() {
+  if (!STATIC_DIR) {
+    dialog.showErrorBox("Bundled assets missing",
+      "The distribution build expects a static bundle but none was found.\n" +
+      "Looked at: " + path.join(process.resourcesPath, VARIANT.bundledDist || "static"));
+    return false;
+  }
+  try {
+    const { server, port } = await startStaticServer(STATIC_DIR);
+    staticServer = server;
+    SERVE_PORT = port;
+    return true;
+  } catch (e) {
+    log("static server failed: " + e.message);
+    dialog.showErrorBox("Server start failed", "Could not start in-process static server: " + e.message);
+    return false;
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -130,7 +231,7 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
     },
   });
-  mainWindow.loadURL(VITE_URL);
+  mainWindow.loadURL(`http://localhost:${SERVE_PORT}/`);
   // 32-bit WASM is forced via window.MOORHEN_FORCE_32BIT, set early by preload.js.
   // (The old dom-ready WebAssembly.validate override never matched the probe — it checked
   //  arr[12] instead of arr[11] — and being renderer-only could not reach the Coot worker.)
@@ -147,9 +248,12 @@ function createWindow() {
 // Local HTTP endpoint that the MoorhenMCP server POSTs commands to. Token-auth,
 // 127.0.0.1 only. Non-screenshot verbs are forwarded to the renderer's
 // MoorhenControlBridge over IPC; "screenshot" is served here via capturePage.
-const CONTROL_PORT = parseInt(process.env.MOORHEN_CONTROL_PORT || String(VITE_PORT + 36827), 10); // 5173->42000
+const CONTROL_PORT = parseInt(process.env.MOORHEN_CONTROL_PORT || String((SERVE_PORT || 5173) + 36827), 10); // 5173->42000
 const CONTROL_TOKEN = process.env.MOORHEN_CONTROL_TOKEN || crypto.randomBytes(16).toString("hex");
-const CONTROL_FILE = path.join(os.homedir(), ".moorhen-mcp", `control-${VITE_PORT}.json`);
+// CONTROL_FILE is keyed by serve port so multiple Moorhens (prod/dev/dist) coexist
+function controlFilePath() {
+  return path.join(os.homedir(), ".moorhen-mcp", `control-${SERVE_PORT}.json`);
+}
 const controlPending = new Map(); // id -> { resolve, reject, timer }
 
 function invokeRenderer(win, verb, args) {
@@ -181,7 +285,7 @@ function startControlServer(win) {
       if (msg.token !== CONTROL_TOKEN) return reply(403, { ok: false, error: "bad token" });
       try {
         let result;
-        if (msg.verb === "ping") result = { ok: true, title: WINDOW_TITLE, vitePort: VITE_PORT };
+        if (msg.verb === "ping") result = { ok: true, title: WINDOW_TITLE, vitePort: SERVE_PORT };
         else if (msg.verb === "screenshot") result = { png: (await win.webContents.capturePage()).toPNG().toString("base64") };
         else result = await invokeRenderer(win, msg.verb, msg.args);
         reply(200, { ok: true, result });
@@ -192,16 +296,17 @@ function startControlServer(win) {
   server.listen(CONTROL_PORT, "127.0.0.1", () => {
     log(`control server on 127.0.0.1:${CONTROL_PORT}`);
     try {
-      fs.mkdirSync(path.dirname(CONTROL_FILE), { recursive: true });
-      fs.writeFileSync(CONTROL_FILE, JSON.stringify({ port: CONTROL_PORT, token: CONTROL_TOKEN, vitePort: VITE_PORT, title: WINDOW_TITLE, pid: process.pid }, null, 2));
+      const ctlFile = controlFilePath();
+      fs.mkdirSync(path.dirname(ctlFile), { recursive: true });
+      fs.writeFileSync(ctlFile, JSON.stringify({ port: CONTROL_PORT, token: CONTROL_TOKEN, vitePort: SERVE_PORT, title: WINDOW_TITLE, pid: process.pid }, null, 2));
     } catch (e) { log("control file write failed: " + e.message); }
   });
 }
 
 app.whenReady().then(async () => {
   fs.writeFileSync(LOG_PATH, "=== Moorhen wrapper started " + new Date().toISOString() + " ===\n");
-  log("App ready");
-  const ok = await startVite();
+  log("App ready (variant=" + (IS_DIST ? "dist" : "prod/dev") + ")");
+  const ok = IS_DIST ? await startBundledServer() : await startVite();
   if (ok) {
     createWindow();
     startControlServer(mainWindow);
@@ -211,11 +316,14 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  log("All windows closed, killing vite");
+  log("All windows closed, shutting down");
   if (viteProcess) {
     try { viteProcess.kill("SIGTERM"); } catch (e) {}
   }
-  try { fs.unlinkSync(CONTROL_FILE); } catch (e) {}
+  if (staticServer) {
+    try { staticServer.close(); } catch (e) {}
+  }
+  try { fs.unlinkSync(controlFilePath()); } catch (e) {}
   app.quit();
 });
 

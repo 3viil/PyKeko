@@ -6,11 +6,14 @@
     "start": "electron .",
     "package": "electron-forge package",
     "package:dev": "MOORHEN_VARIANT=dev electron-forge package",
-    "make": "electron-forge make"
+    "package:dist": "MOORHEN_VARIANT=dist electron-forge package",
+    "make": "electron-forge make",
+    "make:dist": "MOORHEN_VARIANT=dist electron-forge make"
   },
   "devDependencies": {
-    "electron": "^38.0.0",
     "@electron-forge/cli": "^7.0.0",
-    "@electron-forge/maker-zip": "^7.0.0"
+    "@electron-forge/maker-dmg": "^7.11.2",
+    "@electron-forge/maker-zip": "^7.0.0",
+    "electron": "^38.0.0"
   }
 }
