@@ -41,7 +41,7 @@ const IS_DIST = VARIANT_KEY === "dist";
 
 // Where the baby-gru source tree lives on the build machine.
 const BABY_GRU = path.join(os.homedir(), "Moorhen", "baby-gru");
-// Staging directory inside MoorhenWrapper. Becomes Resources/app/static/ in
+// Staging directory inside PyKeko. Becomes Resources/app/static/ in
 // the packaged app via packagerConfig.extraResource (added below for dist).
 const STATIC_DIR = path.join(__dirname, "static");
 
@@ -61,7 +61,7 @@ function buildBabyGruSpa() {
   // The repo's vite.config.mts is set up for LIBRARY builds (build.lib).
   // For the SPA we drop a transient alt config alongside it that loads the
   // base config's plugins but disables lib mode. outDir points directly at
-  // MoorhenWrapper/static so vite copies built JS + public/ contents there
+  // PyKeko/static so vite copies built JS + public/ contents there
   // in one step. Cleaned up in finally{}.
   log("Staging built bundle in " + STATIC_DIR);
   if (fs.existsSync(STATIC_DIR)) fs.rmSync(STATIC_DIR, { recursive: true, force: true });

@@ -34,7 +34,7 @@ const STATIC_DIR = resolveStaticDir();
 const IS_DIST = !!STATIC_DIR;
 
 // Port is dynamic in dist mode (whatever the static server picks), fixed
-// in dev mode (matches vite port so MoorhenMCP can find it).
+// in dev mode (matches vite port so PyKekoMCP can find it).
 let SERVE_PORT = parseInt(process.env.MOORHEN_VITE_PORT || VARIANT.vitePort || "5173", 10);
 
 let viteProcess = null;
@@ -244,8 +244,8 @@ function createWindow() {
 
 // vite-plugin-cross-origin-isolation already sets COEP/COOP — don't override here
 
-// ---- Control server (for MoorhenMCP) ---------------------------------------
-// Local HTTP endpoint that the MoorhenMCP server POSTs commands to. Token-auth,
+// ---- Control server (for PyKekoMCP) ---------------------------------------
+// Local HTTP endpoint that the PyKekoMCP server POSTs commands to. Token-auth,
 // 127.0.0.1 only. Non-screenshot verbs are forwarded to the renderer's
 // MoorhenControlBridge over IPC; "screenshot" is served here via capturePage.
 const CONTROL_PORT = parseInt(process.env.MOORHEN_CONTROL_PORT || String((SERVE_PORT || 5173) + 36827), 10); // 5173->42000

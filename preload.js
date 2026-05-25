@@ -1,4 +1,4 @@
-// MoorhenWrapper preload — runs before page scripts in an isolated world.
+// PyKeko preload — runs before page scripts in an isolated world.
 //
 // 1) Force 32-bit WASM: the 64-bit Coot module init hangs intermittently in Electron
 //    (createCoot64Module deadlocks in the worker). The renderer loader and
@@ -6,7 +6,7 @@
 //    ?force32=1 to the CootWorker URL so the worker (separate context) honors it too.
 //    The browser build has no preload, so it keeps 64-bit.
 //
-// 2) Control channel for MoorhenMCP: expose window.__moorhenControl so the in-page
+// 2) Control channel for PyKekoMCP: expose window.__moorhenControl so the in-page
 //    MoorhenControlBridge can receive invoke messages from the Electron main process
 //    (which fronts the local HTTP control server) and return results — over IPC,
 //    keeping contextIsolation on (no nodeIntegration in the renderer).
