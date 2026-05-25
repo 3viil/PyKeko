@@ -1,14 +1,12 @@
 {
-  "name": "moorhen-wrapper",
+  "name": "pykeko-wrapper",
   "version": "1.0.0",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "package": "electron-forge package",
     "package:dev": "MOORHEN_VARIANT=dev electron-forge package",
-    "package:dist": "MOORHEN_VARIANT=dist electron-forge package",
-    "make": "electron-forge make",
-    "make:dist": "MOORHEN_VARIANT=dist electron-forge make"
+    "make": "electron-forge make"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.0.0",

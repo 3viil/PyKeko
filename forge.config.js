@@ -1,8 +1,7 @@
-// Build both the production and dev desktop apps from this single repo:
-//   npm run package        -> MoorhenLocal.app  (~/Moorhen/baby-gru,     vite port 5173)
-//   npm run package:dev    -> MoorhenDev.app     (~/Moorhen-dev/baby-gru, vite port 5174)
-//   MOORHEN_VARIANT=dist npm run make
-//                          -> Moorhen.dmg + Moorhen.app (self-contained, no vite/node at runtime)
+// Build the dist (default) and dev desktop apps from this single repo:
+//   npm run package         -> PyKeko.app    (self-contained dist, no vite/node at runtime)
+//   npm run package:dev     -> PyKekoDev.app (~/Moorhen-dev/baby-gru, vite port 5174, devtools)
+//   npm run make            -> PyKeko.dmg + PyKeko.app
 //
 // The selected variant is baked into variant.json (read by main.js at runtime),
 // so the packaged, double-clickable app knows which Moorhen tree and port to use
@@ -13,40 +12,32 @@ const os = require("os");
 const { execFileSync } = require("child_process");
 
 const VARIANTS = {
-  prod: {
-    name: "MoorhenLocal",
-    config: {
-      moorhenSubdir: "Moorhen/baby-gru",
-      vitePort: 5173,
-      logPath: "/tmp/moorhen-wrapper.log",
-      title: "Moorhen",
-    },
-  },
-  dev: {
-    name: "MoorhenDev",
-    config: {
-      moorhenSubdir: "Moorhen-dev/baby-gru",
-      vitePort: 5174,
-      logPath: "/tmp/moorhen-wrapper-dev.log",
-      title: "Moorhen Dev",
-      devTools: true,
-    },
-  },
   // dist variant: self-contained, redistributable build. The .app bundles a
   // pre-built static dist/ tree and serves it via an in-process HTTP server,
   // so it does not depend on ~/Moorhen, node, npm, emsdk, or vite at runtime.
   dist: {
-    name: "Moorhen",
+    name: "PyKeko",
     config: {
       bundledDist: "static",  // relative to app.asar.unpacked or Resources/app/
-      logPath: "/tmp/moorhen-dist.log",
-      title: "Moorhen",
+      logPath: "/tmp/pykeko.log",
+      title: "PyKeko",
+    },
+  },
+  dev: {
+    name: "PyKekoDev",
+    config: {
+      moorhenSubdir: "Moorhen-dev/baby-gru",
+      vitePort: 5174,
+      logPath: "/tmp/pykeko-dev.log",
+      title: "PyKeko Dev",
+      devTools: true,
     },
   },
 };
 
-const variant = VARIANTS[process.env.MOORHEN_VARIANT || "prod"] || VARIANTS.prod;
-const IS_DIST = (process.env.MOORHEN_VARIANT || "prod") === "dist";
+const VARIANT_KEY = process.env.MOORHEN_VARIANT || "dist";
+const variant = VARIANTS[VARIANT_KEY] || VARIANTS.dist;
+const IS_DIST = VARIANT_KEY === "dist";
 
 // Where the baby-gru source tree lives on the build machine.
 const BABY_GRU = path.join(os.homedir(), "Moorhen", "baby-gru");
@@ -116,6 +107,7 @@ export default defineConfig({
 module.exports = {
   packagerConfig: {
     name: variant.name,
+    icon: path.join(__dirname, "PyKeko.icns"),
     // For dist, ship the static bundle alongside the JS so main.js can find
     // it at runtime via path.join(process.resourcesPath, 'static').
     extraResource: IS_DIST ? [STATIC_DIR] : undefined,
@@ -134,12 +126,12 @@ module.exports = {
   },
   makers: [
     { name: "@electron-forge/maker-zip", platforms: ["darwin"] },
-    // DMG for the dist variant only — prod/dev keep producing .zip
+    // DMG for the dist variant only — dev keeps producing .zip
     ...(IS_DIST
       ? [{
           name: "@electron-forge/maker-dmg",
           config: {
-            name: "Moorhen",
+            name: "PyKeko",
             overwrite: true,
           },
           platforms: ["darwin"],

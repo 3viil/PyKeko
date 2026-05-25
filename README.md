@@ -1,59 +1,100 @@
-# MoorhenWrapper
+<p align="center">
+  <img src="PyKeko_icon.png" alt="PyKeko" width="160" height="160" />
+</p>
 
-Minimal Electron wrapper for [Moorhen](https://github.com/3viil/MoorHenMH) that gives you a desktop window instead of a browser tab.
+<h1 align="center">PyKeko</h1>
+
+<p align="center">
+  Desktop wrapper for <a href="https://github.com/3viil/MoorHenMH">Moorhen</a> — gives you a native window instead of a browser tab.<br/>
+  Named after the <a href="https://en.wikipedia.org/wiki/Australasian_swamphen">pūkeko</a>, the NZ cousin of moorhens and coots.
+</p>
+
+---
+
+## Variants
+
+Two desktop apps build from this single repo:
+
+| App | Build command | Source | Port | Notes |
+| --- | --- | --- | --- | --- |
+| **PyKeko** | `npm run package` (or `npm run make` for DMG) | Bundled static dist (inside the .app) | dynamic | Self-contained — no vite/node/emsdk required at runtime. Redistributable. |
+| **PyKeko Dev** | `npm run package:dev` | `~/Moorhen-dev/baby-gru/` | 5174 | Live vite dev server, devtools auto-open. |
+
+The selected variant is baked into `variant.json` at package time (see `forge.config.js`) so the packaged, double-clickable app self-describes its target tree/port.
 
 ## How it works
 
-This is **not** a full Electron port of Moorhen. It's a thin wrapper that:
+A thin Electron wrapper that:
 
-1. Starts a vite dev server invisibly in the background (from `~/Moorhen/baby-gru/`)
-2. Opens an Electron window pointed at `http://localhost:5173/`
-3. Forces 32-bit WASM mode (more reliable in Electron's renderer)
-4. Sets COEP/COOP headers for SharedArrayBuffer
-5. Runs a token-authenticated HTTP control server on `127.0.0.1:<random>` and writes `{port, token, vitePort}` to `~/.moorhen-mcp/control-<vitePort>.json` — that's what [MoorhenMCP](https://github.com/3viil/MoorhenMCP) connects to so Claude can drive the running app
-6. Kills vite when the window closes
+1. **dev variant**: starts a vite dev server invisibly in the background (from `~/Moorhen-dev/baby-gru/`) and opens an Electron window pointed at `http://localhost:5174/`.
+2. **dist variant**: serves a pre-built static bundle from inside the .app via an in-process HTTP server (no vite, no node dependencies at runtime).
+3. Forces 32-bit WASM mode (more reliable in Electron's renderer).
+4. Sets COEP/COOP headers for SharedArrayBuffer.
+5. Runs a token-authenticated HTTP control server on `127.0.0.1:<random>` and writes `{port, token, vitePort}` to `~/.moorhen-mcp/control-<vitePort>.json` — that's what [MoorhenMCP](https://github.com/3viil/MoorhenMCP) connects to so Claude can drive the running app.
+6. Kills vite (dev variant) or the static server (dist variant) when the window closes.
 
-On first launch it also runs the baby-gru codegen steps if their outputs are missing (`create-version`, `transpile-ts-worker`, `transpile-protobuf`, `transpile-graphql-codegen`). The `transpile-ts-worker` step builds `public/MoorhenAssets/wasm/CootWorker.js` — without it the Coot command worker can't load (the request falls back to vite's HTML, throwing `Unexpected token '<'`).
-
-The benefit: avoids the CRA/CJS/double-bundling problems of the original MoorhenElectron build path. The vite dev server natively handles all the module resolution and HMR.
+On first launch of the dev variant, it runs the baby-gru codegen steps if their outputs are missing (`create-version`, `transpile-ts-worker`, `transpile-protobuf`, `transpile-graphql-codegen`). The `transpile-ts-worker` step builds `public/MoorhenAssets/wasm/CootWorker.js` — without it the Coot command worker can't load (the request falls back to vite's HTML, throwing `Unexpected token '<'`).
 
 ## Requirements
 
-- Moorhen source tree at `~/Moorhen/baby-gru/` (clone of [3viil/MoorHenMH](https://github.com/3viil/MoorHenMH))
+**Dev variant only:**
+- Moorhen source tree at `~/Moorhen-dev/baby-gru/` (clone of [3viil/MoorHenMH](https://github.com/3viil/MoorHenMH))
 - Node.js 18+
-- Built WASM artifacts in `~/Moorhen/baby-gru/public/MoorhenAssets/wasm/`
+- Built WASM artifacts in `~/Moorhen-dev/baby-gru/public/MoorhenAssets/wasm/`
 
-## Build
+**Dist variant:** none at runtime. At build time the dist build runs codegen + vite build against `~/Moorhen/baby-gru/`, then bundles the result.
+
+## Build & install
+
+**Dist (default — self-contained .app):**
 
 ```bash
 npm install
-npx electron-forge package
-xattr -rc out/MoorhenLocal-darwin-arm64/MoorhenLocal.app
-cp -r out/MoorhenLocal-darwin-arm64/MoorhenLocal.app /Applications/
+npm run package
+xattr -rc out/PyKeko-darwin-arm64/PyKeko.app
+cp -r out/PyKeko-darwin-arm64/PyKeko.app /Applications/
+```
+
+**Dist as a DMG:**
+
+```bash
+npm run make
+# Output: out/make/PyKeko-1.0.0-arm64.dmg (or similar)
+```
+
+**Dev:**
+
+```bash
+npm run package:dev
+xattr -rc out/PyKekoDev-darwin-arm64/PyKekoDev.app
+cp -r out/PyKekoDev-darwin-arm64/PyKekoDev.app /Applications/
 ```
 
 ## Run
 
-Launch from `/Applications/MoorhenLocal.app`, or:
+Launch from `/Applications/PyKeko.app` or `/Applications/PyKekoDev.app`, or for unpackaged runs:
 
 ```bash
-npx electron .
+npm start                            # dist (default)
+MOORHEN_VARIANT=dev npm start        # dev
 ```
+
+Runtime overrides (unpackaged only): `MOORHEN_DIR`, `MOORHEN_VITE_PORT`, `MOORHEN_TITLE`, `MOORHEN_LOG_PATH`.
 
 ## Debugging
 
-Log file: `/tmp/moorhen-wrapper.log`
+Log files:
+- `PyKeko`: `/tmp/pykeko.log`
+- `PyKeko Dev`: `/tmp/pykeko-dev.log`
 
-To open with DevTools, edit `main.js` and uncomment the `openDevTools` line.
+DevTools auto-open in the dev variant. For the dist variant, set `VARIANT.devTools = true` in `forge.config.js` and rebuild.
 
-## Dev variant
+## Icons
 
-The dev app builds from this same repo — no separate copy needed:
+The PyKeko app icon (multi-resolution macOS `.icns`) lives at `PyKeko.icns` and is referenced by `forge.config.js → packagerConfig.icon`, so all packaged builds inherit it.
 
-```bash
-npm run package:dev
-xattr -rc out/MoorhenDev-darwin-arm64/MoorhenDev.app
-cp -r out/MoorhenDev-darwin-arm64/MoorhenDev.app /Applications/
-```
-
-`package:dev` sets `MOORHEN_VARIANT=dev`, which `forge.config.js` bakes into `variant.json` (read by `main.js`): it targets `~/Moorhen-dev/baby-gru/` on port 5174, so it won't clash with production (port 5173). For unpackaged runs (`npm start`) you can override at runtime with `MOORHEN_DIR`, `MOORHEN_VITE_PORT`, `MOORHEN_TITLE`, `MOORHEN_LOG_PATH`.
+| Asset | Use |
+| --- | --- |
+| `PyKeko.icns` | macOS app icon (16–1024 px) |
+| `PyKeko_icon.png` | Square branded icon (blue background) |
+| `PyKeko_logo.png` | Transparent-background logo (for embedding in UIs / docs) |

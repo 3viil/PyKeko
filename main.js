@@ -8,15 +8,15 @@ const crypto = require("crypto");
 
 // Variant config is baked into variant.json at package time (see forge.config.js)
 // and overridable via env vars for unpackaged `npm start` / `electron .` runs.
-// Defaults are the production values.
+// Defaults are the dist values.
 function loadVariant() {
   try { return require(path.join(__dirname, "variant.json")); } catch (e) { return {}; }
 }
 const VARIANT = loadVariant();
 const MOORHEN_DIR = process.env.MOORHEN_DIR
   || path.join(os.homedir(), VARIANT.moorhenSubdir || "Moorhen/baby-gru");
-const LOG_PATH = process.env.MOORHEN_LOG_PATH || VARIANT.logPath || "/tmp/moorhen-wrapper.log";
-const WINDOW_TITLE = process.env.MOORHEN_TITLE || VARIANT.title || "Moorhen";
+const LOG_PATH = process.env.MOORHEN_LOG_PATH || VARIANT.logPath || "/tmp/pykeko.log";
+const WINDOW_TITLE = process.env.MOORHEN_TITLE || VARIANT.title || "PyKeko";
 const OPEN_DEVTOOLS = VARIANT.devTools === true;
 
 // dist variant: serve a packaged static bundle instead of running vite.
@@ -34,7 +34,7 @@ const STATIC_DIR = resolveStaticDir();
 const IS_DIST = !!STATIC_DIR;
 
 // Port is dynamic in dist mode (whatever the static server picks), fixed
-// in prod/dev mode (matches vite port so MoorhenMCP can find it).
+// in dev mode (matches vite port so MoorhenMCP can find it).
 let SERVE_PORT = parseInt(process.env.MOORHEN_VITE_PORT || VARIANT.vitePort || "5173", 10);
 
 let viteProcess = null;
@@ -161,7 +161,7 @@ async function startVite() {
 
   log("Starting vite from " + MOORHEN_DIR);
   if (!fs.existsSync(MOORHEN_DIR)) {
-    dialog.showErrorBox("Moorhen not found", `Moorhen source directory not found at:\n${MOORHEN_DIR}`);
+    dialog.showErrorBox("Moorhen source not found", `Moorhen source directory not found at:\n${MOORHEN_DIR}`);
     return false;
   }
 
@@ -250,7 +250,7 @@ function createWindow() {
 // MoorhenControlBridge over IPC; "screenshot" is served here via capturePage.
 const CONTROL_PORT = parseInt(process.env.MOORHEN_CONTROL_PORT || String((SERVE_PORT || 5173) + 36827), 10); // 5173->42000
 const CONTROL_TOKEN = process.env.MOORHEN_CONTROL_TOKEN || crypto.randomBytes(16).toString("hex");
-// CONTROL_FILE is keyed by serve port so multiple Moorhens (prod/dev/dist) coexist
+// CONTROL_FILE is keyed by serve port so multiple PyKeko instances (dev/dist) coexist
 function controlFilePath() {
   return path.join(os.homedir(), ".moorhen-mcp", `control-${SERVE_PORT}.json`);
 }
@@ -304,8 +304,8 @@ function startControlServer(win) {
 }
 
 app.whenReady().then(async () => {
-  fs.writeFileSync(LOG_PATH, "=== Moorhen wrapper started " + new Date().toISOString() + " ===\n");
-  log("App ready (variant=" + (IS_DIST ? "dist" : "prod/dev") + ")");
+  fs.writeFileSync(LOG_PATH, "=== PyKeko wrapper started " + new Date().toISOString() + " ===\n");
+  log("App ready (variant=" + (IS_DIST ? "dist" : "dev") + ")");
   const ok = IS_DIST ? await startBundledServer() : await startVite();
   if (ok) {
     createWindow();
