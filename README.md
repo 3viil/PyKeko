@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="PyKeko_icon.png" alt="PyKeko" width="160" height="160" />
+  <img src="PyKeko_avatar.png" alt="PyKeko" width="160" height="160" />
 </p>
 
 <h1 align="center">PyKeko</h1>
@@ -96,5 +96,6 @@ The PyKeko app icon (multi-resolution macOS `.icns`) lives at `PyKeko.icns` and 
 | Asset | Use |
 | --- | --- |
 | `PyKeko.icns` | macOS app icon (16–1024 px) |
-| `PyKeko_icon.png` | Square branded icon (blue background) |
+| `PyKeko_icon.png` | Rounded-square branded icon, dark-corner mask (source for `.icns`; designed for the OS app-icon clip) |
+| `PyKeko_avatar.png` | Flat square (5%-cropped from icon) — GitHub avatar, social previews, README embeds |
 | `PyKeko_logo.png` | Transparent-background logo (for embedding in UIs / docs) |

@@ -53,13 +53,13 @@ If you need to "rebrand" further, change titles, READMEs, app names, package nam
 
 - Version: `0.1.0` in `package.json`, `CFBundleShortVersionString` derived from it
 - Release: [pk-v0.1](https://github.com/pykeko/Moorhen-PyKeko/releases/tag/pk-v0.1) on Moorhen-PyKeko, asset: `PyKeko.dmg` (185 MB)
-- Icons: `PyKeko.icns` (multi-resolution, used by electron-forge), `PyKeko_icon.png` (blue-BG square, for docs), `PyKeko_logo.png` (transparent, for UI embedding)
+- Icons: `PyKeko.icns` (multi-resolution, used by electron-forge), `PyKeko_icon.png` (rounded-square with dark-corner mask, source for the `.icns` — intended for OS app-icon clip), `PyKeko_avatar.png` (flat-square 5%-crop of the icon — used for the GH org avatar, repo social previews, and README `<img>` embeds), `PyKeko_logo.png` (transparent, for UI embedding)
 
 ## Pending follow-ups
 
 - [ ] Delete obsolete GitHub repos (the pre-rename originals — `gh repo list hilgersmt` and look for repos *not* in the table above; plus `strava-analytics`). Needs `gh auth refresh -h github.com -s delete_repo` first.
 - [ ] Pin the [install gist](https://gist.github.com/hilgersmt/797821d1fb70599b21fd31159b346a95) on the GitHub profile (web UI; the 4 current pins have 2 slots free)
-- [ ] Upload `PyKeko_icon.png` as social-preview image for each of the 3 repos (web UI per repo's Settings page — not API-accessible)
+- [ ] Upload `PyKeko_avatar.png` as social-preview image for each of the 3 pykeko org repos (web UI per repo's Settings page — not API-accessible). Org avatar (`pykeko/settings/profile`) uses the same file.
 
 ## Where to look
 
