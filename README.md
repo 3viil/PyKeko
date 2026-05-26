@@ -5,7 +5,7 @@
 <h1 align="center">PyKeko</h1>
 
 <p align="center">
-  Desktop wrapper for <a href="https://github.com/3viil/Moorhen-PyKeko">Moorhen</a> — gives you a native window instead of a browser tab.<br/>
+  Desktop wrapper for <a href="https://github.com/pykeko/Moorhen-PyKeko">Moorhen</a> — gives you a native window instead of a browser tab.<br/>
   Named after the <a href="https://en.wikipedia.org/wiki/Australasian_swamphen">pūkeko</a>, the NZ cousin of moorhens and coots.
 </p>
 
@@ -30,7 +30,7 @@ A thin Electron wrapper that:
 2. **dist variant**: serves a pre-built static bundle from inside the .app via an in-process HTTP server (no vite, no node dependencies at runtime).
 3. Forces 32-bit WASM mode (more reliable in Electron's renderer).
 4. Sets COEP/COOP headers for SharedArrayBuffer.
-5. Runs a token-authenticated HTTP control server on `127.0.0.1:<random>` and writes `{port, token, vitePort}` to `~/.moorhen-mcp/control-<vitePort>.json` — that's what [PyKekoMCP](https://github.com/3viil/PyKekoMCP) connects to so Claude can drive the running app.
+5. Runs a token-authenticated HTTP control server on `127.0.0.1:<random>` and writes `{port, token, vitePort}` to `~/.moorhen-mcp/control-<vitePort>.json` — that's what [PyKekoMCP](https://github.com/pykeko/PyKekoMCP) connects to so Claude can drive the running app.
 6. Kills vite (dev variant) or the static server (dist variant) when the window closes.
 
 On first launch of the dev variant, it runs the baby-gru codegen steps if their outputs are missing (`create-version`, `transpile-ts-worker`, `transpile-protobuf`, `transpile-graphql-codegen`). The `transpile-ts-worker` step builds `public/MoorhenAssets/wasm/CootWorker.js` — without it the Coot command worker can't load (the request falls back to vite's HTML, throwing `Unexpected token '<'`).
@@ -38,7 +38,7 @@ On first launch of the dev variant, it runs the baby-gru codegen steps if their 
 ## Requirements
 
 **Dev variant only:**
-- Moorhen source tree at `~/Moorhen-dev/baby-gru/` (clone of [3viil/Moorhen-PyKeko](https://github.com/3viil/Moorhen-PyKeko))
+- Moorhen source tree at `~/Moorhen-dev/baby-gru/` (clone of [pykeko/Moorhen-PyKeko](https://github.com/pykeko/Moorhen-PyKeko))
 - Node.js 18+
 - Built WASM artifacts in `~/Moorhen-dev/baby-gru/public/MoorhenAssets/wasm/`
 
