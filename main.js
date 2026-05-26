@@ -6,6 +6,13 @@ const fs = require("fs");
 const os = require("os");
 const crypto = require("crypto");
 
+// Force SharedArrayBuffer unconditionally — required by Coot's pthread WASM worker.
+// Chromium otherwise gates SAB behind `crossOriginIsolated`, which the live-vite dev
+// variant doesn't achieve on first load (COEP/COOP take full effect only after a
+// reload, even though vite serves the headers correctly). This switch decouples SAB
+// from isolation, so the worker initializes on first launch in both prod and dev.
+app.commandLine.appendSwitch("enable-features", "SharedArrayBuffer");
+
 // Variant config is baked into variant.json at package time (see forge.config.js)
 // and overridable via env vars for unpackaged `npm start` / `electron .` runs.
 // Defaults are the dist values.
