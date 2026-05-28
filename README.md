@@ -5,9 +5,10 @@
 <h1 align="center">PyKeko</h1>
 
 <p align="center">
-  Desktop wrapper for <a href="https://github.com/pykeko/Moorhen-PyKeko">Moorhen</a> — gives you a native window instead of a browser tab.<br/>
-  Named after the <a href="https://en.wikipedia.org/wiki/Australasian_swamphen">pūkeko</a>, the NZ cousin of moorhens and coots.
+  The <strong>Electron desktop wrapper</strong> for <a href="https://github.com/pykeko/Moorhen-PyKeko">Moorhen-PyKeko</a> — packages the web app into a native macOS <code>.app</code> / <code>.dmg</code>, serves the bundle, and runs the control server that lets external tools drive it.
 </p>
+
+> 🐦 **Part of the [PyKeko project](https://github.com/pykeko)** — see the org page for what PyKeko is, the Coot→Moorhen→PyKeko heritage, and install instructions. This README covers the **wrapper's internals**.
 
 ---
 
@@ -39,7 +40,7 @@ On first launch of the dev variant, it runs the baby-gru codegen steps if their 
 
 **Dev variant only:**
 - Moorhen source tree at `~/Moorhen-dev/baby-gru/` (clone of [pykeko/Moorhen-PyKeko](https://github.com/pykeko/Moorhen-PyKeko))
-- Node.js 18+
+- Node.js 20+ via Homebrew (`/opt/homebrew/bin`); vite 7 requires it, and anaconda/CCP4 node on `PATH` will break the build
 - Built WASM artifacts in `~/Moorhen-dev/baby-gru/public/MoorhenAssets/wasm/`
 
 **Dist variant:** none at runtime. At build time the dist build runs codegen + vite build against `~/Moorhen/baby-gru/`, then bundles the result.
@@ -59,7 +60,7 @@ cp -r out/PyKeko-darwin-arm64/PyKeko.app /Applications/
 
 ```bash
 npm run make
-# Output: out/make/PyKeko-1.0.0-arm64.dmg (or similar)
+# Output: out/make/PyKeko.dmg
 ```
 
 **Dev:**
