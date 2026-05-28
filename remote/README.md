@@ -13,7 +13,7 @@ and pinging each, so you don't pass a port unless several apps are open.
 import pykeko_remote as pk
 
 app = pk.connect()                 # auto-find the running PyKeko (or connect(vite_port=5174))
-app.load("1crn")                   # fetch coordinates from RCSB by PDB id
+app.load("7sj3")                   # fetch coordinates from RCSB by PDB id
 app.load("/data/model.pdb")        # ...or load a local file
 app.load_files("model.pdb", "ligand.cif")   # batch: the dict attaches to the model
 app.go_to("//A/15")
@@ -33,7 +33,7 @@ Every control verb is reachable; the named methods are thin wrappers, and
 
 ```sh
 pykeko-remote state
-pykeko-remote load 1crn
+pykeko-remote load 7sj3
 pykeko-remote load model.pdb ligand.cif      # files batched; PDB ids fetched
 pykeko-remote goto //A/15
 pykeko-remote refine //A/15 TRIPLE
