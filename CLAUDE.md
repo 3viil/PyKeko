@@ -49,10 +49,13 @@ These flow between PyKeko (wrapper), PyKekoMCP, and the in-page bridge inside Mo
 
 If you need to "rebrand" further, change titles, READMEs, app names, package names — never the above.
 
-## Current state (as of pk-v0.1, 2026-05-25)
+## Current state (as of pk-v0.2, 2026-05-28)
 
-- Version: `0.1.0` in `package.json`, `CFBundleShortVersionString` derived from it
-- Release: [pk-v0.1](https://github.com/pykeko/Moorhen-PyKeko/releases/tag/pk-v0.1) on Moorhen-PyKeko, asset: `PyKeko.dmg` (185 MB)
+- Version: `0.2.0` in `package.json`, `CFBundleShortVersionString` derived from it
+- Release: [pk-v0.2](https://github.com/pykeko/Moorhen-PyKeko/releases/tag/pk-v0.2) on Moorhen-PyKeko, asset: `PyKeko.dmg` (~197 MB). From 0.2.0 the wrapper carries a matching `pk-v0.2` tag too.
+  - 0.2.0 adds: CLI launch+load (`.cif`→dictionary attach, `pykeko 1crn`, `.pml`), single-instance file handoff + `--new`, `remote/pykeko_remote.py` (PyMOL-`-R`-style client), Preferences → "Install command-line launcher" + first-run hint, residue **Edit torsions** panel (local φ/ψ + χ + live Ramachandran), black bg / hydrogens-by-default / PyMOL-default scripting.
+- Build/release: `PATH=/opt/homebrew/bin:$PATH npm run make` (Homebrew node 26; the vite dist build is a few minutes). Smoke-test the built app by installing over `/Applications/PyKeko.app` and launching with `--new` — and **don't leave PyKekoDev running**, two coot pthread instances contend at worker-init and the second hangs on "Moorhen is loading…" (not a bug; see project memory).
+- [pk-v0.1](https://github.com/pykeko/Moorhen-PyKeko/releases/tag/pk-v0.1): the prior release (`PyKeko.dmg`, 185 MB)
 - Icons: `PyKeko.icns` (multi-resolution, used by electron-forge), `PyKeko_icon.png` (rounded-square with dark-corner mask, source for the `.icns` — intended for OS app-icon clip), `PyKeko_avatar.png` (flat-square 5%-crop of the icon — used for the GH org avatar, repo social previews, and README `<img>` embeds), `PyKeko_logo.png` (transparent, for UI embedding)
 
 ## Pending follow-ups
