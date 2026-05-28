@@ -4,3 +4,5 @@ variant.json
 static/
 *.log
 .DS_Store
+__pycache__/
+*.pyc

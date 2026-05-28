@@ -22,4 +22,12 @@ contextBridge.exposeInMainWorld("__moorhenControl", {
   },
   sendResult: (res) => ipcRenderer.send("moorhen-control:result", res),
   ready: (verbs) => ipcRenderer.send("moorhen-control:ready", verbs),
+  // Renderer -> main: show a native OS open dialog rooted at the working directory
+  // and load the chosen files (the File menu's "Open Files" uses this under Electron,
+  // since a browser <input type=file> can't set a starting directory).
+  openFiles: () => ipcRenderer.invoke("pykeko:open-files"),
+  // Renderer -> main: install / check the `pykeko` command-line launcher in
+  // /usr/local/bin (VS Code-style). installCliLauncher prompts for admin once.
+  installCliLauncher: () => ipcRenderer.invoke("pykeko:install-cli"),
+  cliLauncherStatus: () => ipcRenderer.invoke("pykeko:cli-status"),
 });

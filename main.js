@@ -279,7 +279,89 @@ function startControlServer(win) {
     clearTimeout(p.timer); controlPending.delete(res.id);
     if (res.ok) p.resolve(res.result); else p.reject(new Error(res.error || "control error"));
   });
-  ipcMain.on("moorhen-control:ready", (_e, verbs) => log("control bridge ready; verbs: " + (verbs || []).join(",")));
+  ipcMain.on("moorhen-control:ready", async (_e, verbs) => {
+    log("control bridge ready; verbs: " + (verbs || []).join(","));
+    // Once the renderer's control bridge is up, load any files / PDB IDs from the
+    // launch command line (plus any macOS "Open With" files queued before ready).
+    if (!initialFilesLoaded) {
+      initialFilesLoaded = true;
+      const ids = parsePdbIds(process.argv, LAUNCH_CWD);
+      const files = parseFileArgs(process.argv, LAUNCH_CWD).concat(pendingOpenFiles.splice(0));
+      const scripts = parseScriptArgs(process.argv, LAUNCH_CWD);
+      if (ids.length || files.length || scripts.length) {
+        log("CLI initial load: " + [...ids, ...files, ...scripts].join(", "));
+        await loadPdbIdsIntoRenderer(win, ids);   // coords first so a CIF in files attaches to them
+        await loadFilesIntoRenderer(win, files);
+        await runScriptsInRenderer(win, scripts);  // .pml last so it can act on what was loaded
+      }
+    }
+  });
+
+  // Native "Open Files" dialog for the renderer (File → Open Files under Electron).
+  // Rooted at the working directory, remembers the last-used folder, then loads the
+  // chosen files via the loadFiles control verb (same path as the CLI launch).
+  ipcMain.handle("pykeko:open-files", async () => {
+    try {
+      const r = await dialog.showOpenDialog(win, {
+        defaultPath: lastOpenDir,
+        properties: ["openFile", "multiSelections"],
+        filters: [
+          { name: "Molecular data", extensions: ["pdb", "ent", "cif", "mmcif", "mol", "mtz", "map", "mrc", "ccp4", "gz", "pb"] },
+          { name: "All files", extensions: ["*"] },
+        ],
+      });
+      if (r.canceled || !r.filePaths || r.filePaths.length === 0) return { canceled: true };
+      lastOpenDir = path.dirname(r.filePaths[0]);
+      await loadFilesIntoRenderer(win, r.filePaths);
+      return { canceled: false, files: r.filePaths.map((p) => path.basename(p)) };
+    } catch (e) {
+      log("open-files dialog failed: " + (e && e.message));
+      return { canceled: true, error: String((e && e.message) || e) };
+    }
+  });
+
+  // VS Code-style "Install Command-Line Launcher": write a tiny launcher to
+  // /usr/local/bin (on the default PATH for every login shell via /etc/paths, so it
+  // works regardless of shell) that execs THIS app's binary. /usr/local/bin is
+  // root-owned, so the write goes through one osascript admin prompt. The launcher
+  // execs the binary directly (cwd is inherited from the shell), so `pykeko foo.pdb`
+  // resolves relative paths correctly without needing MOORHEN_CWD.
+  const cliName = IS_DIST ? "pykeko" : "pykeko-dev";
+  const cliTarget = "/usr/local/bin/" + cliName;
+  const launcherScript = '#!/bin/sh\n# ' + cliName + ' launcher (installed by ' + WINDOW_TITLE + ')\nexec "' + process.execPath + '" "$@"\n';
+
+  ipcMain.handle("pykeko:cli-status", async () => {
+    try {
+      if (!fs.existsSync(cliTarget)) return { installed: false, name: cliName, target: cliTarget };
+      const content = fs.readFileSync(cliTarget, "utf8");
+      return { installed: content.includes(process.execPath), name: cliName, target: cliTarget };
+    } catch (e) {
+      return { installed: false, name: cliName, target: cliTarget, error: String((e && e.message) || e) };
+    }
+  });
+
+  ipcMain.handle("pykeko:install-cli", async () => {
+    const tmp = path.join(os.tmpdir(), "pykeko-launcher-" + Date.now());
+    try {
+      fs.writeFileSync(tmp, launcherScript, { mode: 0o755 });
+      const shellCmd = "mkdir -p /usr/local/bin && cp '" + tmp + "' '" + cliTarget + "' && chmod 755 '" + cliTarget + "'";
+      const escaped = shellCmd.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      await new Promise((resolve, reject) => {
+        const { execFile } = require("child_process");
+        execFile("osascript", ["-e", 'do shell script "' + escaped + '" with administrator privileges'],
+          (err, _stdout, stderr) => { if (err) reject(new Error(stderr || err.message)); else resolve(); });
+      });
+      log("installed CLI launcher at " + cliTarget);
+      return { ok: true, name: cliName, target: cliTarget };
+    } catch (e) {
+      const msg = String((e && e.message) || e);
+      log("install-cli failed: " + msg);
+      // User cancelling the admin prompt shows up as a -128 / "User canceled" error.
+      return { ok: false, canceled: /-128|User canceled/i.test(msg), error: msg };
+    } finally {
+      try { fs.unlinkSync(tmp); } catch (e2) {}
+    }
+  });
 
   const server = http.createServer((req, res) => {
     if (req.method !== "POST") { res.writeHead(405); res.end(); return; }
@@ -310,30 +392,152 @@ function startControlServer(win) {
   });
 }
 
-app.whenReady().then(async () => {
-  fs.writeFileSync(LOG_PATH, "=== PyKeko wrapper started " + new Date().toISOString() + " ===\n");
-  log("App ready (variant=" + (IS_DIST ? "dist" : "dev") + ")");
-  const ok = IS_DIST ? await startBundledServer() : await startVite();
-  if (ok) {
-    createWindow();
-    startControlServer(mainWindow);
-  } else {
+// ---- CLI file loading ------------------------------------------------------
+// `pykeko a.pdb b.mtz c.cif` launches and loads the files. The pykeko wrapper
+// script sets MOORHEN_CWD so relative paths resolve against the shell's cwd
+// (Electron's process.cwd() is unreliable for a .app launch). `--new` forces a
+// fresh session instead of loading into a running instance.
+const WANT_NEW = process.argv.includes("--new");
+const LAUNCH_CWD = process.env.MOORHEN_CWD || process.cwd();
+const LOADABLE_RE = /\.(pdb|ent|cif|mmcif|mtz|mrc|map|ccp4|gz)$/i;
+let initialFilesLoaded = false;
+const pendingOpenFiles = []; // macOS "Open With" files arriving before the bridge is ready
+let lastOpenDir = LAUNCH_CWD; // native open-dialog starts here, then follows the user
+
+function parseFileArgs(argv, cwd) {
+  const out = [];
+  for (const a of argv) {
+    if (typeof a !== "string" || a.startsWith("-")) continue; // skip flags / Chromium switches
+    if (!LOADABLE_RE.test(a)) continue;
+    const resolved = path.isAbsolute(a) ? a : path.resolve(cwd || process.cwd(), a);
+    try { if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) out.push(resolved); } catch (e) {}
+  }
+  return out;
+}
+
+async function loadFilesIntoRenderer(win, filePaths) {
+  if (!win || !filePaths || filePaths.length === 0) return;
+  const specs = [];
+  for (const p of filePaths) {
+    try { specs.push({ name: path.basename(p), dataBase64: fs.readFileSync(p).toString("base64") }); }
+    catch (e) { log("could not read CLI file " + p + ": " + e.message); }
+  }
+  if (specs.length === 0) return;
+  try { log("loadFiles -> " + JSON.stringify(await invokeRenderer(win, "loadFiles", [specs]))); }
+  catch (e) { log("loadFiles failed: " + e.message); }
+}
+
+// PDB IDs on the command line (e.g. `pykeko 1crn 7sj3`) — fetched from RCSB.
+// A classic PDB ID is 4 chars starting with a digit; a token is only treated as an
+// ID if it isn't also an existing file on disk.
+const PDB_ID_RE = /^[0-9][a-zA-Z0-9]{3}$/;
+function parsePdbIds(argv, cwd) {
+  const out = [];
+  for (const a of argv) {
+    if (typeof a !== "string" || a.startsWith("-")) continue;
+    if (!PDB_ID_RE.test(a)) continue;
+    const resolved = path.isAbsolute(a) ? a : path.resolve(cwd || process.cwd(), a);
+    try { if (fs.existsSync(resolved)) continue; } catch (e) {}
+    out.push(a.toLowerCase());
+  }
+  return out;
+}
+
+async function loadPdbIdsIntoRenderer(win, ids) {
+  if (!win || !ids || ids.length === 0) return;
+  for (const id of ids) {
+    const url = `https://files.rcsb.org/download/${id.toUpperCase()}.pdb`;
+    try { log(`fetch ${id} -> ` + JSON.stringify(await invokeRenderer(win, "loadCoordsFromURL", [url, id]))); }
+    catch (e) { log(`fetch ${id} failed: ` + e.message); }
+  }
+}
+
+// PyMOL scripts (.pml) on the command line — run through PyKeko's PyMOL translator
+// (runPymol), after structures/files are loaded so the script can act on them. This is
+// the first "script file type"; .py / other types can hang off the same parse-then-run
+// pattern later.
+function parseScriptArgs(argv, cwd) {
+  const out = [];
+  for (const a of argv) {
+    if (typeof a !== "string" || a.startsWith("-")) continue;
+    if (!/\.pml$/i.test(a)) continue;
+    const resolved = path.isAbsolute(a) ? a : path.resolve(cwd || process.cwd(), a);
+    try { if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) out.push(resolved); } catch (e) {}
+  }
+  return out;
+}
+
+async function runScriptsInRenderer(win, scriptPaths) {
+  if (!win || !scriptPaths || scriptPaths.length === 0) return;
+  for (const p of scriptPaths) {
+    try {
+      const script = fs.readFileSync(p, "utf8");
+      log(`runPymol ${path.basename(p)} -> ` + JSON.stringify(await invokeRenderer(win, "runPymol", [script])));
+    } catch (e) { log(`runPymol ${p} failed: ` + e.message); }
+  }
+}
+
+// macOS Finder "Open With → PyKeko" / drag-onto-dock-icon
+app.on("open-file", (event, filePath) => {
+  event.preventDefault();
+  if (mainWindow && initialFilesLoaded) loadFilesIntoRenderer(mainWindow, [filePath]);
+  else pendingOpenFiles.push(filePath);
+});
+
+function startApp() {
+  app.whenReady().then(async () => {
+    fs.writeFileSync(LOG_PATH, "=== PyKeko wrapper started " + new Date().toISOString() + " ===\n");
+    log("App ready (variant=" + (IS_DIST ? "dist" : "dev") + ", cwd=" + LAUNCH_CWD + (WANT_NEW ? ", --new" : "") + ")");
+    const ok = IS_DIST ? await startBundledServer() : await startVite();
+    if (ok) {
+      createWindow();
+      startControlServer(mainWindow);
+    } else {
+      app.quit();
+    }
+  });
+
+  app.on("window-all-closed", () => {
+    log("All windows closed, shutting down");
+    if (viteProcess) {
+      try { viteProcess.kill("SIGTERM"); } catch (e) {}
+    }
+    if (staticServer) {
+      try { staticServer.close(); } catch (e) {}
+    }
+    try { fs.unlinkSync(controlFilePath()); } catch (e) {}
     app.quit();
-  }
-});
+  });
 
-app.on("window-all-closed", () => {
-  log("All windows closed, shutting down");
-  if (viteProcess) {
-    try { viteProcess.kill("SIGTERM"); } catch (e) {}
-  }
-  if (staticServer) {
-    try { staticServer.close(); } catch (e) {}
-  }
-  try { fs.unlinkSync(controlFilePath()); } catch (e) {}
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+}
+
+// Single-instance model: by default a second `pykeko ...` hands its files to the
+// running instance (PyMOL-RPC-like). `--new` skips the lock for a fresh session
+// (clean for the dist app's random ports; the dev variant's fixed vite port 5174
+// means a --new dev instance reuses the running server, so --new is mainly a
+// dist-app feature).
+if (!WANT_NEW && !app.requestSingleInstanceLock()) {
+  // A primary instance already holds the lock; Electron delivers our argv to it
+  // via the primary's 'second-instance' handler. Nothing else to do — just exit.
   app.quit();
-});
-
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
-});
+} else {
+  if (!WANT_NEW) {
+    app.on("second-instance", async (_event, argv, workingDirectory) => {
+      log("second-instance argv: " + (argv || []).join(" "));
+      const ids = parsePdbIds(argv, workingDirectory);
+      const files = parseFileArgs(argv, workingDirectory);
+      const scripts = parseScriptArgs(argv, workingDirectory);
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+        await loadPdbIdsIntoRenderer(mainWindow, ids);
+        await loadFilesIntoRenderer(mainWindow, files);
+        await runScriptsInRenderer(mainWindow, scripts);
+      }
+    });
+  }
+  startApp();
+}
