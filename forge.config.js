@@ -110,7 +110,12 @@ module.exports = {
     icon: path.join(__dirname, "PyKeko.icns"),
     // For dist, ship the static bundle alongside the JS so main.js can find
     // it at runtime via path.join(process.resourcesPath, 'static').
-    extraResource: IS_DIST ? [STATIC_DIR] : undefined,
+    // For both variants, ship the prebuilt Mol* viewer template (Route B export):
+    // viewer-template/dist/ -> process.resourcesPath/dist/index.html.
+    extraResource: [
+      ...(IS_DIST ? [STATIC_DIR] : []),
+      path.join(__dirname, "viewer-template", "dist"),
+    ],
   },
   hooks: {
     // Bake the variant config so the packaged app self-describes its target tree/port.

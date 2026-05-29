@@ -33,4 +33,7 @@ contextBridge.exposeInMainWorld("__moorhenControl", {
   // Renderer -> main: show a native Save panel (defaults to the launch dir) and
   // write a PNG data URL to disk. Used by high-res screenshot export + `ray`/`png`.
   saveImage: (dataUrl, suggestedName) => ipcRenderer.invoke("pykeko:save-image", { dataUrl, suggestedName }),
+  // Renderer -> main: take an MVS JSON document, inject into the prebuilt Mol*
+  // viewer template, and save a single self-contained .html via the Save panel.
+  exportMvsViewer: (mvsJson, suggestedName) => ipcRenderer.invoke("pykeko:export-mvs-viewer", { mvsJson, suggestedName }),
 });

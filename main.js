@@ -343,6 +343,61 @@ function startControlServer(win) {
     }
   });
 
+  // Export the loaded scene as a self-contained Mol* viewer HTML (Route B).
+  // Reads the prebuilt viewer template (viewer-template/dist/index.html, shipped
+  // with the app — or a dev fallback under ~/PyKeko while iterating), injects the
+  // renderer-supplied MVS JSON INSIDE the placeholder <script> tag only (a global
+  // string replace would clobber the same literal living inside the inlined JS
+  // bundle), then writes via the native Save panel.
+  ipcMain.handle("pykeko:export-mvs-viewer", async (_evt, payload) => {
+    try {
+      const { mvsJson, suggestedName } = payload || {};
+      if (!mvsJson) return { ok: false, error: "no MVS JSON supplied" };
+
+      const candidates = [
+        // Packaged: extraResource ships viewer-template/dist as Resources/dist/.
+        path.join(process.resourcesPath || "", "dist", "index.html"),
+        // Unpackaged dev (running `npm start` from ~/PyKeko).
+        path.join(__dirname, "viewer-template", "dist", "index.html"),
+        path.join(__dirname, "..", "viewer-template", "dist", "index.html"),
+        // Last-ditch dev fallback (working from a stale .app, source tree present).
+        path.join(os.homedir(), "PyKeko", "viewer-template", "dist", "index.html"),
+      ];
+      let templatePath = null;
+      for (const p of candidates) { if (fs.existsSync(p)) { templatePath = p; break; } }
+      if (!templatePath) {
+        return { ok: false, error: "viewer template not found; tried: " + candidates.join(" | ") };
+      }
+
+      const template = fs.readFileSync(templatePath, "utf8");
+      const SCRIPT_RE = /(<script id="__pykeko_mvs__" type="application\/json">)([\s\S]*?)(<\/script>)/;
+      if (!SCRIPT_RE.test(template)) {
+        return { ok: false, error: "placeholder script tag not found in template at " + templatePath };
+      }
+      // Keep the JSON safe inside <script>: any literal `</script>` inside string
+      // values would close the tag prematurely. Escaping `</` to `<\/` is parsed
+      // identically by JSON.parse and is the standard workaround.
+      const safe = String(mvsJson).replace(/<\//g, "<\\/");
+      const html = template.replace(SCRIPT_RE, (_m, open, _content, close) => open + safe + close);
+
+      const win = BrowserWindow.getFocusedWindow() || mainWindow;
+      const suggested = String(suggestedName || "pykeko_viewer.html").replace(/[/\\]/g, "_");
+      const r = await dialog.showSaveDialog(win, {
+        title: "Save portable viewer",
+        defaultPath: path.join(lastSaveDir || app.getPath("desktop"), suggested),
+        filters: [{ name: "HTML", extensions: ["html"] }],
+      });
+      if (r.canceled || !r.filePath) return { canceled: true };
+      lastSaveDir = path.dirname(r.filePath);
+      fs.writeFileSync(r.filePath, html);
+      log("saved portable viewer: " + r.filePath + " (" + Buffer.byteLength(html).toLocaleString() + " bytes)");
+      return { ok: true, path: r.filePath };
+    } catch (e) {
+      log("export-mvs-viewer failed: " + (e && e.message));
+      return { ok: false, error: String((e && e.message) || e) };
+    }
+  });
+
   // VS Code-style "Install Command-Line Launcher": write a tiny launcher to
   // /usr/local/bin (on the default PATH for every login shell via /etc/paths, so it
   // works regardless of shell) that execs THIS app's binary. /usr/local/bin is
