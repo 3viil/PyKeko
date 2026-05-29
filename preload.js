@@ -30,4 +30,7 @@ contextBridge.exposeInMainWorld("__moorhenControl", {
   // /usr/local/bin (VS Code-style). installCliLauncher prompts for admin once.
   installCliLauncher: () => ipcRenderer.invoke("pykeko:install-cli"),
   cliLauncherStatus: () => ipcRenderer.invoke("pykeko:cli-status"),
+  // Renderer -> main: show a native Save panel (defaults to the launch dir) and
+  // write a PNG data URL to disk. Used by high-res screenshot export + `ray`/`png`.
+  saveImage: (dataUrl, suggestedName) => ipcRenderer.invoke("pykeko:save-image", { dataUrl, suggestedName }),
 });

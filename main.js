@@ -320,6 +320,29 @@ function startControlServer(win) {
     }
   });
 
+  // Native "Save Image" dialog for high-res screenshot export (File → Screenshot,
+  // and the PyMOL `ray`/`png` commands). Defaults to the launch directory, then
+  // follows the user. Receives a PNG data URL from the renderer and writes it.
+  ipcMain.handle("pykeko:save-image", async (_evt, payload) => {
+    try {
+      const suggested = String((payload && payload.suggestedName) || "moorhen_screenshot.png").replace(/[/\\]/g, "_");
+      const r = await dialog.showSaveDialog(win, {
+        title: "Save image",
+        defaultPath: path.join(lastSaveDir, suggested),
+        filters: [{ name: "PNG image", extensions: ["png"] }],
+      });
+      if (r.canceled || !r.filePath) return { canceled: true };
+      lastSaveDir = path.dirname(r.filePath);
+      const base64 = String((payload && payload.dataUrl) || "").replace(/^data:image\/\w+;base64,/, "");
+      fs.writeFileSync(r.filePath, Buffer.from(base64, "base64"));
+      log("saved image: " + r.filePath);
+      return { ok: true, path: r.filePath };
+    } catch (e) {
+      log("save-image dialog failed: " + (e && e.message));
+      return { ok: false, error: String((e && e.message) || e) };
+    }
+  });
+
   // VS Code-style "Install Command-Line Launcher": write a tiny launcher to
   // /usr/local/bin (on the default PATH for every login shell via /etc/paths, so it
   // works regardless of shell) that execs THIS app's binary. /usr/local/bin is
@@ -403,6 +426,7 @@ const LOADABLE_RE = /\.(pdb|ent|cif|mmcif|mtz|mrc|map|ccp4|gz)$/i;
 let initialFilesLoaded = false;
 const pendingOpenFiles = []; // macOS "Open With" files arriving before the bridge is ready
 let lastOpenDir = LAUNCH_CWD; // native open-dialog starts here, then follows the user
+let lastSaveDir = LAUNCH_CWD; // native save-dialog starts at the launch dir, then follows the user
 
 function parseFileArgs(argv, cwd) {
   const out = [];
