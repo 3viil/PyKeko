@@ -328,7 +328,7 @@ function startControlServer(win) {
       const suggested = String((payload && payload.suggestedName) || "moorhen_screenshot.png").replace(/[/\\]/g, "_");
       const r = await dialog.showSaveDialog(win, {
         title: "Save image",
-        defaultPath: path.join(lastSaveDir || app.getPath("documents"), suggested),
+        defaultPath: path.join(lastSaveDir || app.getPath("desktop"), suggested),
         filters: [{ name: "PNG image", extensions: ["png"] }],
       });
       if (r.canceled || !r.filePath) return { canceled: true };
@@ -427,7 +427,7 @@ let initialFilesLoaded = false;
 const pendingOpenFiles = []; // macOS "Open With" files arriving before the bridge is ready
 let lastOpenDir = LAUNCH_CWD; // native open-dialog starts here, then follows the user
 // native save-dialog starts at the launch dir when that's usable (CLI launch from
-// a project folder), else falls back to Documents (a GUI launch has cwd "/"). Then follows the user.
+// a project folder), else falls back to the Desktop (a GUI launch has cwd "/"). Then follows the user.
 let lastSaveDir = (LAUNCH_CWD && LAUNCH_CWD !== "/") ? LAUNCH_CWD : null;
 
 function parseFileArgs(argv, cwd) {
