@@ -36,4 +36,10 @@ contextBridge.exposeInMainWorld("__moorhenControl", {
   // Renderer -> main: take an MVS JSON document, inject into the prebuilt Mol*
   // viewer template, and save a single self-contained .html via the Save panel.
   exportMvsViewer: (mvsJson, suggestedName) => ipcRenderer.invoke("pykeko:export-mvs-viewer", { mvsJson, suggestedName }),
+  // Renderer -> main: write one or more files to disk via the Save panel.
+  // files: [{ name, dataBase64 }] — first is primary (its name suggests the dialog
+  // default; user-chosen path is honoured for it). Siblings go in the chosen
+  // directory under their original names. Used by PyMOL `save` (single .pdb/.cif
+  // or a .pml bundle with sibling structure/map files).
+  saveBundle: (suggestedName, files) => ipcRenderer.invoke("pykeko:save-bundle", { suggestedName, files }),
 });

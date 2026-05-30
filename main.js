@@ -343,6 +343,49 @@ function startControlServer(win) {
     }
   });
 
+  // Generic save-bundle: writes one or more files to disk via the native Save panel.
+  // Payload: { suggestedName, files: [{ name, dataBase64 }] }
+  //   - First file in the list is the "primary" — its name suggests the dialog default,
+  //     and the path the user picks is used for it verbatim.
+  //   - Subsequent files are written into the same directory as the primary, using
+  //     their `name` field as-is (relative siblings).
+  // Used by `save model.pdb` (one entry) and `save scene.pml` (script + .pdb + .ccp4).
+  ipcMain.handle("pykeko:save-bundle", async (_evt, payload) => {
+    try {
+      const { suggestedName, files } = payload || {};
+      if (!Array.isArray(files) || files.length === 0) {
+        return { ok: false, error: "no files supplied" };
+      }
+      const primary = files[0];
+      const win = BrowserWindow.getFocusedWindow() || mainWindow;
+      const suggested = String(suggestedName || primary.name || "pykeko_export").replace(/[/\\]/g, "_");
+      const r = await dialog.showSaveDialog(win, {
+        title: "Save",
+        defaultPath: path.join(lastSaveDir || app.getPath("desktop"), suggested),
+      });
+      if (r.canceled || !r.filePath) return { canceled: true };
+      lastSaveDir = path.dirname(r.filePath);
+
+      // Write primary at the chosen path.
+      fs.writeFileSync(r.filePath, Buffer.from(primary.dataBase64, "base64"));
+      const writtenPaths = [r.filePath];
+
+      // Write siblings in the same directory under their original names.
+      for (const f of files.slice(1)) {
+        // Sanitize: no path separators allowed in sibling names (keep it flat).
+        const safeName = String(f.name).replace(/[/\\]/g, "_");
+        const fp = path.join(lastSaveDir, safeName);
+        fs.writeFileSync(fp, Buffer.from(f.dataBase64, "base64"));
+        writtenPaths.push(fp);
+      }
+      log("saved bundle: " + writtenPaths.length + " file(s), primary=" + r.filePath);
+      return { ok: true, paths: writtenPaths, primary: r.filePath };
+    } catch (e) {
+      log("save-bundle failed: " + (e && e.message));
+      return { ok: false, error: String((e && e.message) || e) };
+    }
+  });
+
   // Export the loaded scene as a self-contained Mol* viewer HTML (Route B).
   // Reads the prebuilt viewer template (viewer-template/dist/index.html, shipped
   // with the app — or a dev fallback under ~/PyKeko while iterating), injects the
